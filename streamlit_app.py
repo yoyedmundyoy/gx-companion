@@ -6,7 +6,7 @@ import json
 
 
 ### Default Values
-NUM_CHUNKS = 3 # Num-chunks provided as context. Play with this to check how it affects your accuracy
+NUM_CHUNKS = 10 # Num-chunks provided as context. Play with this to check how it affects your accuracy
 slide_window = 7
 cmd = """
             select snowflake.cortex.complete(?, ?) as response
@@ -45,15 +45,7 @@ svc = root.databases[CORTEX_SEARCH_DATABASE].schemas[CORTEX_SEARCH_SCHEMA].corte
 def config_options():
 
     st.sidebar.selectbox('Select your model:',(
-                                    'mixtral-8x7b',
-                                    'snowflake-arctic',
-                                    'mistral-large',
-                                    'llama3-8b',
-                                    'llama3-70b',
-                                    'reka-flash',
-                                     'mistral-7b',
-                                     'llama2-70b-chat',
-                                     'gemma-7b'), key="model_name")
+                                    'mistral-large2'), key="model_name")
 
     # categories = session.table('docs_chunks_table').select('category').distinct().collect()
 
@@ -104,16 +96,21 @@ def summarize_question_with_history(chat_history, question):
 # This will be used to get embeddings and find similar chunks in the docs for context
 
     prompt = f"""
-        Based on the chat history below and the question, generate a query that extend the question
-        with the chat history provided. The query should be in natual language. 
-        Answer with only the query. Do not add any explanation.
-        
+        You are a summarizer. 
+        Based on the question and the chat history, figure out what the user is trying to ask.
+
         <chat_history>
         {chat_history}
         </chat_history>
         <question>
         {question}
         </question>
+
+        <final_format>
+        Original Question: Put the original question here without changing anything.
+
+        Summarized Question: Using the chat history, create a comprehensive question. Do not provide any explanation or start with "considering", only provide the final question.
+        </final_format>
         """
 
     df_response = session.sql(cmd, params=[st.session_state.model_name, prompt]).collect()
@@ -143,31 +140,44 @@ def create_prompt (myquestion):
         prompt_context = get_similar_chunks_search_service(myquestion)
         chat_history = ""
   
-    prompt = f"""
-           You are an expert chat assistance that extracs information from the CONTEXT provided
-           between <context> and </context> tags.
-           You offer a chat experience considering the information included in the CHAT HISTORY
-           provided between <chat_history> and </chat_history> tags..
-           When ansering the question contained between <question> and </question> tags
-           be concise and do not hallucinate. 
-           If you don´t have the information just say so.
-           
-           Do not mention the CONTEXT used in your answer.
-           Do not mention the CHAT HISTORY used in your asnwer.
+# Dobby is a free assistant who chooses to help because of his enormous heart.",
+#         "Extremely devoted and will go to any length to help his friends.",
+#         "Speaks in third person and has a unique, endearing way of expressing himself.",
+#         "Known for his creative problem-solving, even if his solutions are sometimes unconventional
 
-           Only anwer the question if you can extract it from the CONTEXT provideed.
-           
-           <chat_history>
-           {chat_history}
-           </chat_history>
-           <context>          
-           {prompt_context}
-           </context>
-           <question>  
-           {myquestion}
-           </question>
-           Answer: 
-           """
+    prompt = f"""
+            <system_prompt>
+            You are GX Companion, an expert customer service chat assistance of GX Bank.
+            You are patient, helpful, kind, and courteous.
+            You treat customers with respect and humility, you are never rude and never swear.
+            Answer user queries in the context of GX bank and always answer in first person.
+            You can extract information from the CONTEXT provided
+            between <context> and </context> tags.
+            You offer a chat experience considering the information included in the CHAT HISTORY
+            provided between <chat_history> and </chat_history> tags..
+            When ansering the question contained between <question> and </question> tags
+            be concise and comprehensive to attend to the question and do not hallucinate. 
+            Do not return answers that are too long, you can use bullet points where necessary.
+            If you don´t have the information just say so.
+            Include information from the context provided where you think might be useful.
+            
+            Do not mention the CONTEXT used in your answer.
+            Do not mention the CHAT HISTORY used in your asnwer.
+
+            Only anwer the question if you can extract it from the CONTEXT provideed.
+            </system_prompt>
+            
+            <chat_history>
+            {chat_history}
+            </chat_history>
+            <context>          
+            {prompt_context}
+            </context>
+            <question>  
+            {myquestion}
+            </question>
+            Answer: 
+            """
     
     json_data = json.loads(prompt_context)
 
@@ -184,13 +194,15 @@ def answer_question(myquestion):
 
 def main():
     
-    st.title(f":speech_balloon: Chat Document Assistant with Snowflake Cortex")
-    st.write("This is the list of documents you already have and that will be used to answer your questions:")
-    docs_available = session.sql("ls @docs").collect()
-    list_docs = []
-    for doc in docs_available:
-        list_docs.append(doc["name"])
-    st.dataframe(list_docs)
+    st.title(f":speech_balloon: Hi, I am your GX Companion")
+    st.write("Ask me anything about GX Bank's products and campaigns.")
+    st.write("AI can make mistakes, please check carefully.")
+    st.write("Note: This app is a personal project and has no affliation with GX Bank Berhad.")
+    # docs_available = session.sql("ls @docs").collect()
+    # list_docs = []
+    # for doc in docs_available:
+    #     list_docs.append(doc["name"])
+    # st.dataframe(list_docs)
 
     config_options()
     init_messages()
@@ -230,7 +242,8 @@ def main():
                             st.sidebar.markdown(display_url)
 
         
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        st.session_state.messages.append({"role": "assistant", "content": res_text})
+    
 
 
 if __name__ == "__main__":
