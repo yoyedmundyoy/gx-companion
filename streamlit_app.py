@@ -2,6 +2,16 @@ import streamlit as st
 from snowflake.snowpark import Session
 from snowflake.core import Root
 
+#Trulens imports
+from trulens.apps.custom import instrument
+from trulens.core import TruSession
+import numpy as np
+from trulens.core import Feedback
+from trulens.core import Select
+from trulens.providers.cortex import Cortex
+from trulens.apps.custom import TruCustomApp
+
+
 ### Prompt
 PROMPT = """
 An excerpt from a document is given below.
@@ -48,23 +58,69 @@ session = Session.builder.configs(CONNECTION_PARAMS).create()
 root = Root(session)
 svc = root.databases[CORTEX_SEARCH_DATABASE].schemas[CORTEX_SEARCH_SCHEMA].cortex_search_services[CORTEX_SEARCH_SERVICE]
 
+### Setting up the RAG class
 class RAG:
+    @instrument
     def retrieve(self, query: str) -> list:
         context_retrieved = svc.search(query, COLUMNS, limit=NUM_CHUNKS)
         return context_retrieved
 
+    @instrument
     def complete(self, query: str, context_str: list) -> str:
         prompt = PROMPT.format(prompt_context=context_str, myquestion=query)
         df_response = session.sql(CMD, params=[st.session_state.model_name, prompt]).collect()
         
         return df_response[0].RESPONSE
 
+    @instrument
     def query(self, query: str) -> str:
         context_str = self.retrieve(query=query)
         completion = self.complete(
             query=query, context_str=context_str
         )
         return completion
+
+rag = RAG()
+
+### Setting up trulens
+trulens_session = TruSession()
+trulens_session.reset_database()
+
+provider = Cortex(session)
+
+# Define a groundedness feedback function
+f_groundedness = (
+    Feedback(
+        provider.groundedness_measure_with_cot_reasons, name="Groundedness"
+    )
+    .on(Select.RecordCalls.retrieve.rets.collect())
+    .on_output()
+)
+# Question/answer relevance between overall question and answer.
+f_answer_relevance = (
+    Feedback(provider.relevance_with_cot_reasons, name="Answer Relevance")
+    .on_input()
+    .on_output()
+)
+
+# Context relevance between question and each context chunk.
+f_context_relevance = (
+    Feedback(
+        provider.context_relevance_with_cot_reasons, name="Context Relevance"
+    )
+    .on_input()
+    .on(Select.RecordCalls.retrieve.rets[:])
+    .aggregate(np.mean)  # choose a different aggregation method if you wish
+)
+
+tru_rag = TruCustomApp(
+        rag,
+        app_name="RAG",
+        app_version="base",
+        feedbacks=[f_groundedness, f_answer_relevance, f_context_relevance],
+    )
+    
+
 
 ### Functions
 
@@ -91,11 +147,22 @@ def init_messages():
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
+
 def main():
     """Main function to run the application logic."""
-    rag = RAG()
+    
     init_app()
     init_messages()
+
+    # Seems like the error only when I call rag.query(), if I comment this out
+    # then the app runs fine
+    with tru_rag as recording:
+        rag.query(
+            "What is GX bank's cyber fraud protect product?"
+        )
+
+    # trulens_session.get_leaderboard()
+
 
     # Accept user input
     if question := st.chat_input("Message GX Companion"):
@@ -118,8 +185,6 @@ def main():
                 message_placeholder.markdown(res_text)
         
         st.session_state.messages.append({"role": "assistant", "content": res_text})
-    
-
 
 if __name__ == "__main__":
     main()
