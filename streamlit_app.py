@@ -1,15 +1,17 @@
+import numpy as np
 import streamlit as st
+from typing import List
+
 from snowflake.snowpark import Session
 from snowflake.core import Root
 
-#Trulens imports
 from trulens.apps.custom import instrument
 from trulens.core import TruSession
-import numpy as np
 from trulens.core import Feedback
 from trulens.core import Select
 from trulens.providers.cortex import Cortex
 from trulens.apps.custom import TruCustomApp
+
 
 
 ### Prompt
@@ -28,10 +30,6 @@ Question: {myquestion}
 Answer:
 """
 
-### Default Values
-NUM_CHUNKS = 10 # Num-chunks provided as context. Play with this to check how it affects your accuracy
-CMD = "select snowflake.cortex.complete(?, ?) as response"
-
 #connection params
 CONNECTION_PARAMS = {
     "account": st.secrets["snowflake"]["account"],
@@ -42,33 +40,48 @@ CONNECTION_PARAMS = {
     "schema": st.secrets["snowflake"]["schema"]
 }
 
-# service params
-CORTEX_SEARCH_DATABASE = "GX_COMPANION"
-CORTEX_SEARCH_SCHEMA = "DATA"
-CORTEX_SEARCH_SERVICE = "GX_SEARCH_SERVICE"
-
-# columns to query in the service
-COLUMNS = [
-    "chunk",
-    "relative_path"
-    # "category"
-]
-
 session = Session.builder.configs(CONNECTION_PARAMS).create()
 root = Root(session)
-svc = root.databases[CORTEX_SEARCH_DATABASE].schemas[CORTEX_SEARCH_SCHEMA].cortex_search_services[CORTEX_SEARCH_SERVICE]
+
+class CortexSearchRetriever:
+
+    def __init__(self, snowpark_session: Session, limit_to_retrieve: int = 4):
+        self._snowpark_session = snowpark_session
+        self._limit_to_retrieve = limit_to_retrieve
+
+    def retrieve(self, query: str) -> List[str]:
+        root = Root(self._snowpark_session)
+        cortex_search_service = (
+            root.databases[st.secrets["cortex_search"]["database"]]
+            .schemas[st.secrets["cortex_search"]["schema"]]
+            .cortex_search_services[st.secrets["cortex_search"]["service"]]
+        )
+        resp = cortex_search_service.search(
+            query=query,
+            columns=[
+                "chunk",
+                "relative_path"
+            ],
+            limit=self._limit_to_retrieve,
+        )
+
+        if resp.results:
+            return [curr["chunk"] for curr in resp.results]
+        else:
+            return []
 
 ### Setting up the RAG class
 class RAG:
     @instrument
     def retrieve(self, query: str) -> list:
-        context_retrieved = svc.search(query, COLUMNS, limit=NUM_CHUNKS)
-        return context_retrieved
+        retriever = CortexSearchRetriever(snowpark_session=session, limit_to_retrieve=4)
+        retrieved_context = retriever.retrieve(query)
+        return retrieved_context
 
     @instrument
     def complete(self, query: str, context_str: list) -> str:
         prompt = PROMPT.format(prompt_context=context_str, myquestion=query)
-        df_response = session.sql(CMD, params=[st.session_state.model_name, prompt]).collect()
+        df_response = session.sql("select snowflake.cortex.complete(?, ?) as response", params=[st.session_state.model_name, prompt]).collect()
         
         return df_response[0].RESPONSE
 
@@ -156,10 +169,10 @@ def main():
 
     # Seems like the error only when I call rag.query(), if I comment this out
     # then the app runs fine
-    with tru_rag as recording:
-        rag.query(
-            "What is GX bank's cyber fraud protect product?"
-        )
+    # with tru_rag as recording:
+    #     rag.query(
+    #         "What is GX bank's cyber fraud protect product?"
+    #     )
 
     # trulens_session.get_leaderboard()
 
