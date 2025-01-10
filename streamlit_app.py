@@ -1,4 +1,3 @@
-import numpy as np
 import streamlit as st
 from typing import List
 
@@ -6,13 +5,14 @@ from snowflake.snowpark import Session
 from snowflake.core import Root
 
 from trulens.apps.custom import instrument
+
+from trulens.apps.custom import TruCustomApp
 from trulens.core import TruSession
+from trulens.connectors.snowflake import SnowflakeConnector
+from trulens.providers.cortex.provider import Cortex
 from trulens.core import Feedback
 from trulens.core import Select
-from trulens.providers.cortex import Cortex
-from trulens.apps.custom import TruCustomApp
-
-
+import numpy as np
 
 ### Prompt
 PROMPT = """
@@ -40,8 +40,13 @@ CONNECTION_PARAMS = {
     "schema": st.secrets["snowflake"]["schema"]
 }
 
+# Initialize Snowflake session
 session = Session.builder.configs(CONNECTION_PARAMS).create()
 root = Root(session)
+
+# Initialize TruLens session
+tru_snowflake_connector = SnowflakeConnector(snowpark_session=session)
+tru_session = TruSession(connector=tru_snowflake_connector)
 
 class CortexSearchRetriever:
 
@@ -72,14 +77,15 @@ class CortexSearchRetriever:
 
 ### Setting up the RAG class
 class RAG:
-    @instrument
-    def retrieve(self, query: str) -> list:
-        retriever = CortexSearchRetriever(snowpark_session=session, limit_to_retrieve=4)
-        retrieved_context = retriever.retrieve(query)
-        return retrieved_context
+    def __init__(self):
+        self.retriever = CortexSearchRetriever(snowpark_session=session, limit_to_retrieve=4)
 
     @instrument
-    def complete(self, query: str, context_str: list) -> str:
+    def retrieve_context(self, query: str) -> list:
+        return self.retriever.retrieve(query)
+
+    @instrument
+    def generate_completion(self, query: str, context_str: list) -> str:
         prompt = PROMPT.format(prompt_context=context_str, myquestion=query)
         df_response = session.sql("select snowflake.cortex.complete(?, ?) as response", params=[st.session_state.model_name, prompt]).collect()
         
@@ -87,52 +93,68 @@ class RAG:
 
     @instrument
     def query(self, query: str) -> str:
-        context_str = self.retrieve(query=query)
-        completion = self.complete(
-            query=query, context_str=context_str
-        )
-        return completion
+        context_str = self.retrieve_context(query=query)
+        return self.generate_completion(query, context_str)
 
 rag = RAG()
 
-### Setting up trulens
-trulens_session = TruSession()
-trulens_session.reset_database()
 
-provider = Cortex(session)
+provider = Cortex(session, "llama3.1-8b")
 
-# Define a groundedness feedback function
 f_groundedness = (
-    Feedback(
-        provider.groundedness_measure_with_cot_reasons, name="Groundedness"
-    )
-    .on(Select.RecordCalls.retrieve.rets.collect())
-    .on_output()
-)
-# Question/answer relevance between overall question and answer.
-f_answer_relevance = (
-    Feedback(provider.relevance_with_cot_reasons, name="Answer Relevance")
-    .on_input()
+    Feedback(provider.groundedness_measure_with_cot_reasons, name="Groundedness")
+    .on(Select.RecordCalls.retrieve_context.rets[:].collect())
     .on_output()
 )
 
-# Context relevance between question and each context chunk.
 f_context_relevance = (
-    Feedback(
-        provider.context_relevance_with_cot_reasons, name="Context Relevance"
-    )
+    Feedback(provider.context_relevance, name="Context Relevance")
     .on_input()
-    .on(Select.RecordCalls.retrieve.rets[:])
-    .aggregate(np.mean)  # choose a different aggregation method if you wish
+    .on(Select.RecordCalls.retrieve_context.rets[:])
+    .aggregate(np.mean)
+)
+
+f_answer_relevance = (
+    Feedback(provider.relevance, name="Answer Relevance")
+    .on_input()
+    .on_output()
+    .aggregate(np.mean)
 )
 
 tru_rag = TruCustomApp(
-        rag,
-        app_name="RAG",
-        app_version="base",
-        feedbacks=[f_groundedness, f_answer_relevance, f_context_relevance],
-    )
-    
+    rag,
+    app_name="RAG",
+    app_version="simple",
+    feedbacks=[f_groundedness, f_answer_relevance, f_context_relevance],
+)
+
+# Still having the same error
+# prompts = [
+#     "How do I launch a streamlit app?",
+#     "How can I capture the state of my session in streamlit?",
+#     "How do I install streamlit?",
+#     "How do I change the background color of a streamlit app?",
+#     "What's the advantage of using a streamlit form?",
+#     "What are some ways I should use checkboxes?",
+#     "How can I conserve space and hide away content?",
+#     "Can you recommend some resources for learning Streamlit?",
+#     "What are some common use cases for Streamlit?",
+#     "How can I deploy a streamlit app on the cloud?",
+#     "How do I add a logo to streamlit?",
+#     "What is the best way to deploy a Streamlit app?",
+#     "How should I use a streamlit toggle?",
+#     "How do I add new pages to my streamlit app?",
+#     "How do I write a dataframe to display in my dashboard?",
+#     "Can I plot a map in streamlit? If so, how?",
+#     "How do vector stores enable efficient similarity search?",
+# ]
+
+
+# with tru_rag as recording:
+#     for prompt in prompts:
+#         rag.query(prompt)
+
+# tru_session.get_leaderboard()
 
 
 ### Functions
