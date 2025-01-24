@@ -23,14 +23,14 @@ Trying to set up Trulens - We wanted to implement Trulens in our project to be a
 Trying to implement conversational history - We wanted to make the chatbot able to understand the historical context of the chat, but we didn't prioritise this as we were trying to figure out how to set up Trulens.
 
 ## Accomplishments that we're proud of 🏆
-Made a working MVP within a couple of days, addressing both technical complexity and social impact
-Learned a lot about Snowflake, Mistral and Trulens and how to implement an application using all of them
+- Made a working MVP within a couple of days, addressing both technical complexity and social impact
+- Learnt a lot about Snowflake, Mistral and Trulens and how to implement an application using all of them
 
 ## What we learned
-We don't know how to set up Trulens yet (rip)
-running mistral-large2 on Snowflake is pretty expensive
+- We don't know how to set up Trulens yet (rip)
+- running mistral-large2 on Snowflake is pretty expensive
 
 ## What's next for GX Companion
-Set up Trulens to be able to measure and optimize our application
-Set up historical capability to allow for smoother conversational abilities
+- Set up Trulens to be able to measure and optimize our application
+- Set up historical capability to allow for smoother conversational abilities
 
