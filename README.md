@@ -1,4 +1,5 @@
-# GX Companion - Submission for [Snowflake Rag N Roll Hackathon]([url](https://snowflake-mistral-rag.devpost.com/))
+# GX Companion
+## Submission for Snowflake Rag N Roll Hackathon
 By bringing together valuable information and cutting-edge AI technology, GX Companion creates a more inclusive banking experience - one question at a time.
 
 ## Inspiration 💡
