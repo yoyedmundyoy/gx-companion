@@ -1,5 +1,6 @@
 # GX Companion
 By bringing together valuable information and cutting-edge AI technology, GX Companion creates a more inclusive banking experience - one question at a time.
+Try out the app: https://gxcompanion.streamlit.app/
 
 ## Inspiration 💡
 With GX Bank being the first digital bank to launch in the Malaysian market, we have customers who are excited to find out more about the new digital banking products. However, the answer to their questions are often buried within long product disclosure sheets and T&C documents.
