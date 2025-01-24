@@ -11,7 +11,9 @@ Valuable information are often locked away from customers in long PDF documents 
 GXBank Companion is a RAG-powered chatbot that has access to a knowledge base containing product disclosure sheets and terms and conditions information about GX Bank's products and campaigns. Users can ask the chatbot directly and GXBank Companion will be able to respond with an accurate and helpful response backed by information in the knowledge base.
 
 ## Impact 💪
-Without GXBank Companion, customers would have to either (1) read the PDF documents themselves to find the answers or (2) ask other people who have read the PDF documents for answers.
+Without GXBank Companion, customers would have to either:
+1) read the PDF documents themselves to find the answers or
+2) ask other people who have read the PDF documents for answers.
 
 With GXBank Companion, customers are empowered to better banking decisions through the ability to get quick and accurate answers to their questions.
 
