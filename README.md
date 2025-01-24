@@ -1,5 +1,4 @@
 # GX Companion
-## Submission for Snowflake Rag N Roll Hackathon
 By bringing together valuable information and cutting-edge AI technology, GX Companion creates a more inclusive banking experience - one question at a time.
 
 ## Inspiration 💡
@@ -37,3 +36,4 @@ Trying to implement conversational history - We wanted to make the chatbot able 
 - Set up Trulens to be able to measure and optimize our application
 - Set up historical capability to allow for smoother conversational abilities
 
+Disclaimer: This is not affliated or developed by GX Bank Berhad, this is solely personal project
